@@ -60,10 +60,21 @@ export class LearningJourneyEngine {
     const scoringResults = this.assessmentService.scoreAll(allItems, input.responses, journey.accessibility);
 
     // Step 4: Update mastery
+    // Build a response map keyed by itemId so timestamp lookup is id-based,
+    // consistent with the scoreAll fix (no positional indexing anywhere).
+    const responsesByItemId = new Map(input.responses.map(r => [r.itemId, r]));
+
     for (const result of scoringResults) {
       if (!result.evidenceIsValid) continue;
-      const ts = input.responses[scoringResults.indexOf(result)]?.timestamp ?? new Date().toISOString();
-      const evidence: MasteryEvidence = { correct: result.correct, timestamp: ts, weight: result.systemConfidence };
+
+      const responseTimestamp = responsesByItemId.get(result.itemId)?.timestamp
+        ?? new Date().toISOString();
+
+      const evidence: MasteryEvidence = {
+        correct: result.correct,
+        timestamp: responseTimestamp,
+        weight: result.systemConfidence,
+      };
 
       for (const kcId of result.kcIds) {
         const logId = makeLogId('mastery', kcId);
@@ -112,7 +123,12 @@ export class LearningJourneyEngine {
     const allValid = scoringResults.filter(r => r.evidenceIsValid);
     const overallCorrect = allValid.length > 0 && allValid.every(r => r.correct);
     if (overallCorrect && input.activity.instructionalModes.includes('explicit')) {
-      const pattern: ResponsePatternRecord = { pattern: 'helped_by_worked_example_first', recency: new Date().toISOString(), strength: 0.60, evidenceRefs: [] };
+      const pattern: ResponsePatternRecord = {
+        pattern: 'helped_by_worked_example_first',
+        recency: new Date().toISOString(),
+        strength: 0.60,
+        evidenceRefs: [],
+      };
       await this.store.upsertResponsePattern(input.journeyId, pattern);
     }
 
@@ -121,15 +137,22 @@ export class LearningJourneyEngine {
     const successRate = allValid.length > 0 ? allValid.filter(r => r.correct).length / allValid.length : 1;
     const fresh = await this.store.getById(input.journeyId);
     if (fresh !== null) {
-      const welfare = successRate < fresh.interest.calibration.targetSuccessLow - 0.20 ? 'frustration_suspected' : 'none';
+      const welfare = successRate < fresh.interest.calibration.targetSuccessLow - 0.20
+        ? 'frustration_suspected' : 'none';
       if (welfare !== fresh.interest.welfare) {
         await this.store.updateInterest(input.journeyId, { ...fresh.interest, welfare });
-        if (welfare !== 'none') await this.eventBus.publish({ kind: 'WelfareFlagRaised', journeyId: input.journeyId, flag: welfare });
+        if (welfare !== 'none') {
+          await this.eventBus.publish({ kind: 'WelfareFlagRaised', journeyId: input.journeyId, flag: welfare });
+        }
       }
     }
 
     // Step 9: Log completion
-    await this.log(input.journeyId, 'ActivityCompleted', { activityId: input.activity.id, scoringResultCount: scoringResults.length, validResultCount: allValid.length }, logEntryIds);
+    await this.log(input.journeyId, 'ActivityCompleted', {
+      activityId: input.activity.id,
+      scoringResultCount: scoringResults.length,
+      validResultCount: allValid.length,
+    }, logEntryIds);
 
     // Step 10: Recommend next
     const journeyForRec = await this.store.getById(input.journeyId);
@@ -137,8 +160,17 @@ export class LearningJourneyEngine {
 
     const recommendation = this.recommendationService.recommendNext(journeyForRec);
     if (recommendation !== null) {
-      await this.log(input.journeyId, 'ActivityRecommended', { activityId: recommendation.activityId, rationale: recommendation.rationale, priorityTier: recommendation.priorityTier }, logEntryIds);
-      await this.eventBus.publish({ kind: 'ActivityRecommended', journeyId: input.journeyId, activityId: recommendation.activityId, rationale: recommendation.rationale });
+      await this.log(input.journeyId, 'ActivityRecommended', {
+        activityId: recommendation.activityId,
+        rationale: recommendation.rationale,
+        priorityTier: recommendation.priorityTier,
+      }, logEntryIds);
+      await this.eventBus.publish({
+        kind: 'ActivityRecommended',
+        journeyId: input.journeyId,
+        activityId: recommendation.activityId,
+        rationale: recommendation.rationale,
+      });
     }
 
     // Step 11: All events already emitted inline above.
