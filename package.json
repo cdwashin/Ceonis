@@ -1,0 +1,16 @@
+{
+  "name": "ceonis-kernel",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CEONIS adaptive learning kernel — the engine that powers every world.",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test:t3_1": "tsx src/tests/t3_1_planted_misconception.test.ts",
+    "test:all": "tsx src/tests/run_all.ts"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "tsx": "^4.7.0"
+  }
+}
