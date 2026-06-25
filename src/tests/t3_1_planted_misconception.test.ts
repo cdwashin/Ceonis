@@ -15,8 +15,12 @@ import { RecommendationService } from '../services/recommendation-service.ts';
 import { InProcessEventBus } from '../services/event-bus.ts';
 import { LearningJourneyEngine } from '../engine/learn-cycle.ts';
 import {
-  STAGE_LEARNING_TO_READ, KC_PHONEME_SEGMENTATION, MISCONCEPTION_LETTER_NAMES,
-  LESSON_PHONEME_INTRO, ASSESSMENT_PHONEME_CVC,
+  STAGE_LEARNING_TO_READ,
+  KC_PHONEME_SEGMENTATION,
+  MISCONCEPTION_LETTER_NAMES,
+  LESSON_PHONEME_INTRO,
+  ASSESSMENT_PHONEME_CVC,
+  ITEM_CAT_SEGMENTATION,
 } from '../content/literacy-minimal.ts';
 import { asChildId, asJourneyId } from '../domain/core.ts';
 import type { AccessibilityProfile } from '../domain/journey.ts';
@@ -46,7 +50,12 @@ async function runT3_1(): Promise<void> {
     interactionNeeds: [], communicationModalities: ['text'], languages: ['en'],
     validEvidenceModes: ['tap', 'text'], presentationPreferences: ['visual-diagram'],
   };
-  const initialJourney = await store.create({ journeyId: asJourneyId('test-journey-001'), childId: asChildId('test-child-001'), stage: STAGE_LEARNING_TO_READ, accessibility: profile });
+  const initialJourney = await store.create({
+    journeyId: asJourneyId('test-journey-001'),
+    childId: asChildId('test-child-001'),
+    stage: STAGE_LEARNING_TO_READ,
+    accessibility: profile,
+  });
   assert(initialJourney !== null,                         'Journey created from empty state');
   assert(initialJourney.knowledgeState.length === 0,     'Journey starts with no mastery records');
   assert(initialJourney.misconceptionState.length === 0, 'Journey starts with no misconception state');
@@ -62,10 +71,11 @@ async function runT3_1(): Promise<void> {
 
   const emittedEvents: string[] = [];
   eventBus.subscribe('MisconceptionDetected', e => { emittedEvents.push(`MisconceptionDetected:${e.misconceptionId}`); });
-  eventBus.subscribe('ActivityRecommended',   e => { emittedEvents.push(`ActivityRecommended`); console.log(`\n     Rationale: "${e.rationale}"`); });
+  eventBus.subscribe('ActivityRecommended',   e => { emittedEvents.push('ActivityRecommended'); console.log(`\n     Rationale: "${e.rationale}"`); });
 
   console.log('\n▸ T3.1  Running learn-cycle — child selects misconception distractor...');
   const misconceptionResponse: ItemResponse = {
+    itemId: ITEM_CAT_SEGMENTATION.id,
     selectedOptionId: 'opt-distractor-letter-names',
     responseMode: 'tap',
     timestamp: new Date().toISOString(),
@@ -88,14 +98,14 @@ async function runT3_1(): Promise<void> {
   assert(result.updatedJourney.journeyLog.length > 0, 'Journey log updated (T1.3)');
 
   const masteryRecord = result.updatedJourney.knowledgeState.find(r => r.kc === KC_PHONEME_SEGMENTATION.id);
-  assert(masteryRecord !== undefined,                                         'Mastery record created (T1.4)');
-  assert(masteryRecord !== undefined && masteryRecord.estimate.value < 0.50,  'Mastery low after incorrect response (T1.4)');
+  assert(masteryRecord !== undefined,                                           'Mastery record created (T1.4)');
+  assert(masteryRecord !== undefined && masteryRecord.estimate.value < 0.50,    'Mastery low after incorrect response (T1.4)');
   assert(masteryRecord !== undefined && masteryRecord.estimate.uncertainty < 1.0, 'Uncertainty decreased (T1.4)');
 
   const forbidden = ['workingMemory','creativity','iq','intelligenceScore','diagnosis','attentionSpan','cognitiveStyle','sessionTime','streak','totalTimeOnPlatform','returnFrequency'];
   const keys = Object.keys(result.updatedJourney);
   for (const field of forbidden) {
-    assert(!keys.includes(field), `No forbidden field "${field}" (T3.7)`);
+    assert(!keys.includes(field), `Journey does not contain forbidden field "${field}" (T3.7)`);
   }
 
   console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
